@@ -46,23 +46,27 @@
 
 
 #ifdef ON_CANARY_PROTECTION
-    #define IF_CANARY_PROTECTED(x) x
+    #define IF_CANARY_PROTECTED(x) x;
     #define CANARY_SIZE sizeof (unsigned long long)
     #define FIRST_CANARY_VALUE  0xDEADBEEF
     #define SECOND_CANARY_VALUE 0xDEADBEEF
+    #define stack_resize(x,y) _stack_canary_resize (x, y);
 #else
-    #define IF_CANARY_PROTECTED(x)
+    #define IF_CANARY_PROTECTED(x)  ;
+    #define CANARY_MODE false
+    #define stack_resize(x,y) _stack_resize (x, y);
+
 #endif
 
 
 #ifdef ON_HASH_PROTECTION
-    #define IF_HASH_PROTECTED(x) x
+    #define IF_HASH_PROTECTED(x) x;
 #else
-    #define IF_HASH_PROTECTED(x)
+    #define IF_HASH_PROTECTED(x)  ;
 #endif
 
 
-const double stack_resize_coefficient = 1.5;
+const double stack_resize_coefficient = 2;
 const size_t time_str_len             = 40;
 
 
@@ -79,12 +83,15 @@ typedef struct Stack_structure      Stack;
 typedef double                      Element_value;
 typedef struct Element_structure    Element;
 typedef struct Stack_info_structure Stack_info;
+IF_CANARY_PROTECTED (typedef unsigned long long canary_t);
 
 typedef unsigned char Stack_state; /*
-    1: &stack   == nullptr
-    2: size     >  capacity
-    3: elements == nullptr, size != 0
-    4: poison is distributed incorrectly
+    1:  &stack   == nullptr
+    2:  size     >  capacity
+    4:  elements == nullptr, size != 0
+    8:  poison is distributed incorrectly
+    16: stack canary corrupted
+    32: data  canary corrupted
 */
 
 
@@ -99,7 +106,7 @@ struct  Stack_info_structure  {
 
 struct  Stack_structure  {
 
-    IF_CANARY_PROTECTED (unsigned long long FIRST_CANARY);
+    IF_CANARY_PROTECTED (canary_t FIRST_CANARY);
 
 
     Element* elements;
@@ -109,7 +116,7 @@ struct  Stack_structure  {
     Stack_info debug_info;
 
 
-    IF_CANARY_PROTECTED (unsigned long long SECOND_CANARY);
+    IF_CANARY_PROTECTED (canary_t SECOND_CANARY);
 };
 
 struct  Element_structure  {
@@ -119,13 +126,14 @@ struct  Element_structure  {
 };
 
 
-Return_code _stack_ctor    (Stack* stack, const char* name, const char* file, const char* func, int line);
-Return_code  stack_dtor    (Stack* stack);
-Return_code  stack_resize  (Stack* stack, size_t new_capacity);
-Return_code  stack_push    (Stack* stack, Element_value new_element_value);
-Element      stack_pop     (Stack* stack, Return_code* return_code_ptr = nullptr);
-Stack_state  stack_damaged (Stack* stack);
-void       _fstack_dump    (Stack* stack, const char* file_name, const char* file, const char* function, int line);
+Return_code _stack_ctor           (Stack* stack, const char* name, const char* file, const char* func, int line);
+Return_code  stack_dtor           (Stack* stack);
+Return_code _stack_resize         (Stack* stack, size_t new_capacity);
+Return_code _stack_canary_resize  (Stack* stack, size_t new_capacity);
+Return_code  stack_push           (Stack* stack, Element_value new_element_value);
+Element      stack_pop            (Stack* stack, Return_code* return_code_ptr = nullptr);
+Stack_state  stack_damaged        (Stack* stack);
+void       _fstack_dump           (Stack* stack, const char* file_name, const char* file, const char* function, int line);
 
 
 

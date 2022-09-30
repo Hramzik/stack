@@ -9,8 +9,6 @@ Return_code  _stack_ctor  (Stack* stack, const char* name, const char* file, con
     if (stack == nullptr || name == nullptr) { log_error (BAD_ARGS); return BAD_ARGS; }
 
 
-    IF_CANARY_PROTECTED (stack->FIRST_CANARY = FIRST_CANARY_VALUE);
-
     stack->elements = nullptr;
     stack->size     = 0;
     stack->capacity = 0;
@@ -21,7 +19,19 @@ Return_code  _stack_ctor  (Stack* stack, const char* name, const char* file, con
     stack->debug_info.birth_line = line;
     stack->debug_info.adress     = stack;
 
-    IF_CANARY_PROTECTED (stack->SECOND_CANARY = SECOND_CANARY_VALUE);
+    IF_CANARY_PROTECTED (
+
+        stack-> FIRST_CANARY =  FIRST_CANARY_VALUE;
+        stack->SECOND_CANARY = SECOND_CANARY_VALUE;
+
+        stack->elements = (Element*) calloc (2 * CANARY_SIZE, 1);
+        if (stack->elements == nullptr) { log_error (MEMORY_ERR); return MEMORY_ERR; }
+
+        ( (canary_t*) stack->elements) [0] =  FIRST_CANARY_VALUE;
+        ( (canary_t*) stack->elements) [1] = SECOND_CANARY_VALUE;
+
+        stack->elements = (Element*) ( (char*) stack->elements + CANARY_SIZE );
+    );
 
 
     return SUCCESS;
@@ -32,13 +42,13 @@ Return_code  stack_dtor  (Stack* stack) {
     assert_stack_ok (stack);
 
 
-    if (stack->elements != nullptr) { free (stack->elements); }
+    if (stack->elements != nullptr) { free (stack->elements); stack->elements = nullptr; } //FINISH
 
 
     return SUCCESS;
 }
 
-Return_code  stack_resize  (Stack* stack, size_t new_capacity) {
+Return_code  _stack_resize  (Stack* stack, size_t new_capacity) {
 
     assert_stack_ok (stack);
 
@@ -56,6 +66,66 @@ Return_code  stack_resize  (Stack* stack, size_t new_capacity) {
     if (stack->size > new_capacity) { stack->size = new_capacity; }
 
 
+    return SUCCESS;
+}
+
+Return_code  _stack_canary_resize  (Stack* stack, size_t new_capacity) {
+
+    assert_stack_ok (stack); //putc('a', stderr);
+
+    size_t new_size = new_capacity * sizeof (Element) + 2 * CANARY_SIZE;
+
+
+    if (new_capacity == stack->capacity) { return SUCCESS; }
+
+    if (new_capacity > stack->capacity) {
+
+        stack->elements = (Element*) ( (char*) stack->elements - CANARY_SIZE);
+
+
+        stack->elements = (Element*) realloc (stack->elements, new_size);
+        if (stack->elements == nullptr) { log_error (MEMORY_ERR); return MEMORY_ERR; }
+
+
+        stack->elements = (Element*) ( (char*) stack->elements + CANARY_SIZE ) + stack->capacity;
+        canary_t second_canary_buffer = *( (canary_t*) stack->elements ); //fprintf (stderr, "%llX", second_canary_buffer);
+
+
+        for (size_t i = 0; i < new_capacity - stack->capacity; i++) {
+
+            stack->elements[i] = Element {NAN, true};
+        }
+
+
+        *( (canary_t*) (stack->elements + new_capacity - stack->capacity) ) = second_canary_buffer;
+        //printf ("%llX", * ( (canary_t*) (stack->elements + new_capacity - stack->capacity) ) );
+
+
+        stack->elements -= stack->capacity;
+        stack->capacity  = new_capacity;
+
+
+        return SUCCESS;
+    }
+
+    stack->elements = (Element*) ( (char*) stack->elements - CANARY_SIZE );
+
+
+    canary_t second_canary_buffer = *(canary_t*) ( (char*) (stack->elements + stack->capacity) + CANARY_SIZE );
+
+
+    stack->elements = (Element*) realloc (stack->elements, new_size);
+    if (stack->elements == nullptr) { log_error (MEMORY_ERR); return MEMORY_ERR; }
+
+
+    *(canary_t*) ( (char*) (stack->elements + new_capacity) + CANARY_SIZE ) = second_canary_buffer;
+
+
+    stack->elements = (Element*) ( (char*) stack->elements + CANARY_SIZE );
+    stack->capacity = new_capacity;
+
+
+    //stack_dump (stack);
     return SUCCESS;
 }
 
@@ -79,7 +149,7 @@ Return_code  stack_push  (Stack* stack, Element_value new_element_value) {
 
         if (resize_code) { log_error (resize_code); return resize_code; }
     }
-
+   // stack_dump (stack);
 
     stack->size += 1;
     stack->elements [stack->size - 1] = Element {new_element_value, false};
@@ -131,18 +201,28 @@ Stack_state  stack_damaged  (Stack* stack) {
     if (stack->size > stack->capacity)                  { stack_state |= (1<<1); }
     if (stack->elements == nullptr && stack->size != 0) { stack_state |= (1<<2); }
 
+
     for (size_t i = 0; i < stack->capacity; i++) {
 
         if (i <  stack->size) if ( stack->elements [i].poisoned) { stack_state |= (1<<3); break; }
         if (i >= stack->size) if (!stack->elements [i].poisoned) { stack_state |= (1<<3); break; }
     }
 
+
+    if (stack-> FIRST_CANARY !=  FIRST_CANARY_VALUE) { stack_state |= (1<<4);  }
+    if (stack->SECOND_CANARY != SECOND_CANARY_VALUE) { stack_state |= (1<<4);  }
+
+
+    if ( *( (canary_t*) stack->elements - 1)                  !=  FIRST_CANARY_VALUE) { stack_state |= (1<<5); }
+    if ( *( (canary_t*) (stack->elements + stack->capacity) ) != SECOND_CANARY_VALUE) { stack_state |= (1<<5); }
+
+
     return stack_state;
 }
 
 void  _fstack_dump  (Stack* stack, const char* file_name, const char* file, const char* func, int line) {
 
-    assert (file != nullptr and func != nullptr);
+    assert (file != nullptr && func != nullptr);
 
 
     FILE* dump_file;
@@ -162,7 +242,7 @@ void  _fstack_dump  (Stack* stack, const char* file_name, const char* file, cons
 
 
     fprintf (dump_file, "--------------------\n");
-    fprintf (dump_file, "Dumping stack at %s in function %s (line %d)...\n", file, func, line);
+    fprintf (dump_file, "Dumping stack at %s in function %s (line %d)...\n\n", file, func, line);
 
 
     if (!stack) { fprintf (dump_file, "Stack pointer is nullptr!\n\n"); return; }
@@ -190,7 +270,7 @@ void  _fstack_dump  (Stack* stack, const char* file_name, const char* file, cons
     else             { fprintf (dump_file, "ok\n"); }
 
 
-    fprintf (dump_file, "size %zd\n",      stack->size);
+    fprintf (dump_file, "size     %zd\n",      stack->size);
     fprintf (dump_file, "capacity %zd\n\n",  stack->capacity);
     if (stack->elements) { fprintf (dump_file, "elements [%p]:\n", stack->elements); }
     else                 { fprintf (dump_file, "elements [nullptr]:\n"); }
@@ -201,7 +281,7 @@ void  _fstack_dump  (Stack* stack, const char* file_name, const char* file, cons
         if (i < stack->size) { fprintf (dump_file, "(in)  "); }
         else                 { fprintf (dump_file, "(out) "); }
 
-        fprintf (dump_file, "[%zd] = %lg (", i, stack->elements[i].value);         // different fprintf function
+        fprintf (dump_file, "[%zd] = %-5lg (", i, stack->elements[i].value);         // different fprintf function
         if (stack->elements[i].poisoned) { fprintf (dump_file,     "poisoned)\n"); }
         else                             { fprintf (dump_file, "not poisoned)\n"); }
     }
@@ -209,16 +289,27 @@ void  _fstack_dump  (Stack* stack, const char* file_name, const char* file, cons
 
 
     IF_CANARY_PROTECTED (
-        fprintf (dump_file, "first  canary - %llX (", stack->FIRST_CANARY);
+        fprintf (dump_file, "first  stack canary - %llX (", stack->FIRST_CANARY);
 
         if (stack->FIRST_CANARY == FIRST_CANARY_VALUE) { fprintf (dump_file, "untouched)\n"); }
         else                                           { fprintf (dump_file, "corrupted)\n"); }
 
-        fprintf (dump_file, "second canary - %llX (", stack->SECOND_CANARY);
+        fprintf (dump_file, "second stack canary - %llX (", stack->SECOND_CANARY);
 
         if (stack->SECOND_CANARY == SECOND_CANARY_VALUE) { fprintf (dump_file, "untouched)\n"); }
         else                                             { fprintf (dump_file, "corrupted)\n"); }
-    )
+
+
+        fprintf (dump_file, "first  data  canary - %llX (", *( (canary_t*) stack->elements - 1));
+
+        if ( *( (canary_t*) stack->elements - 1) == FIRST_CANARY_VALUE) { fprintf (dump_file, "untouched)\n"); }
+        else                                           { fprintf (dump_file, "corrupted)\n"); }
+
+        fprintf (dump_file, "second data  canary - %llX (", *(canary_t*)(stack->elements + stack->capacity) );
+
+        if ( *(canary_t*)(stack->elements + stack->capacity) == SECOND_CANARY_VALUE) { fprintf (dump_file, "untouched)\n"); }
+        else                                             { fprintf (dump_file, "corrupted)\n"); }
+    );
 
     fprintf (dump_file, "\n");
 

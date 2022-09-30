@@ -23,7 +23,7 @@ int main ()
         Element popped = stack_pop (&stack, &return_code);
         printf ("popped %4lg, poisoned - %d, return code - %d\n", popped.value, popped.poisoned, return_code);
     }
-    //fstack_dump (&stack);
+    fstack_dump (&stack);
 
     return 0;
 }

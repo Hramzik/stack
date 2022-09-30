@@ -1,0 +1,22 @@
+--------------------
+Dumping stack at main.cpp in function int main() (line 26)...
+
+this stack has name stack [000000000062fdc0]
+it was created in file main.cpp
+in function int main() (line 12)
+
+stack is ok
+size     2
+capacity 4
+
+elements [0000000000841408]:
+(in)  [0] = 7     (not poisoned)
+(in)  [1] = 13    (not poisoned)
+(out) [2] = nan   (poisoned)
+(out) [3] = nan   (poisoned)
+
+first  stack canary - DEADBEEF (untouched)
+second stack canary - DEADBEEF (untouched)
+first  data  canary - DEADBEEF (untouched)
+second data  canary - DEADBEEF (untouched)
+

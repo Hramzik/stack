@@ -6,12 +6,13 @@
 Return_code  _stack_ctor  (Stack* stack, const char* name, const char* file, const char* func, int line) {
 
     assert ( (file != nullptr) && (func != nullptr) && (line > 0) );
-    if (stack == nullptr || name == nullptr) { log_error (BAD_ARGS); return BAD_ARGS; }
+    if (stack == nullptr || name == nullptr) { log_error (BAD_ARGS); stack_error_dump (stack); return BAD_ARGS; }
 
 
     stack->elements = nullptr;
     stack->size     = 0;
     stack->capacity = 0;
+
 
     stack->debug_info.name = name;
     stack->debug_info.birth_file = file;
@@ -19,13 +20,14 @@ Return_code  _stack_ctor  (Stack* stack, const char* name, const char* file, con
     stack->debug_info.birth_line = line;
     stack->debug_info.adress     = stack;
 
+
     IF_CANARY_PROTECTED (
 
         stack-> FIRST_CANARY =  FIRST_CANARY_VALUE;
         stack->SECOND_CANARY = SECOND_CANARY_VALUE;
 
         stack->elements = (Element*) calloc (2 * CANARY_SIZE, 1);
-        if (stack->elements == nullptr) { log_error (MEMORY_ERR); return MEMORY_ERR; }
+        if (stack->elements == nullptr) { log_error (MEMORY_ERR); stack_error_dump (stack); return MEMORY_ERR; }
 
         ( (canary_t*) stack->elements) [0] =  FIRST_CANARY_VALUE;
         ( (canary_t*) stack->elements) [1] = SECOND_CANARY_VALUE;
@@ -34,30 +36,65 @@ Return_code  _stack_ctor  (Stack* stack, const char* name, const char* file, con
     );
 
 
+    IF_HASH_PROTECTED ( stack_recount_hash (stack); );
+
+
+    STACK_AFTER_OPERATION_DUMPING (stack);
+
+
     return SUCCESS;
 }
 
-Return_code  stack_dtor  (Stack* stack) {
+
+Return_code  _stack_dtor  (Stack* stack) {
 
     assert_stack_ok (stack);
 
 
-    if (stack->elements != nullptr) { free (stack->elements); stack->elements = nullptr; } //FINISH
+    if (stack->elements != nullptr) {
+
+        free (stack->elements);
+        stack->elements = nullptr;
+    }
+
+
+    STACK_AFTER_OPERATION_DUMPING (stack);
 
 
     return SUCCESS;
 }
+
+IF_CANARY_PROTECTED (
+
+    Return_code  _stack_canary_dtor  (Stack* stack) {
+
+        assert_stack_ok (stack);
+
+
+        if (stack->elements != nullptr) {
+
+            free ( (char*) stack->elements - CANARY_SIZE);
+            stack->elements = nullptr;
+        }
+
+
+        STACK_AFTER_OPERATION_DUMPING (stack);
+
+
+        return SUCCESS;
+    }
+)
 
 Return_code  _stack_resize  (Stack* stack, size_t new_capacity) {
 
     assert_stack_ok (stack);
 
 
-    stack->elements = (Element*) realloc (stack->elements, sizeof (Element) * new_capacity); // + 2 * sizeof canary;
-    if (stack->elements == nullptr) { log_error (MEMORY_ERR); return MEMORY_ERR; }
+    stack->elements = (Element*) realloc (stack->elements, sizeof (Element) * new_capacity);
+    if (stack->elements == nullptr && new_capacity != 0) { log_error (MEMORY_ERR); stack_error_dump (stack); return MEMORY_ERR; }
 
 
-    for (size_t i = stack->size; i < new_capacity; i++) { stack->elements [i] = Element {NAN, true}; } // poisoned fillers
+    for (size_t i = stack->size; i < new_capacity; i++) { stack->elements [i] = Element {NAN, true}; }
 
     stack->capacity = new_capacity;
     //printf ("%zd %zd\n", stack->capacity, new_capacity);
@@ -66,68 +103,90 @@ Return_code  _stack_resize  (Stack* stack, size_t new_capacity) {
     if (stack->size > new_capacity) { stack->size = new_capacity; }
 
 
+    IF_HASH_PROTECTED ( stack_recount_hash (stack); );
+
+
+    STACK_AFTER_OPERATION_DUMPING (stack);
+
+
     return SUCCESS;
 }
 
-Return_code  _stack_canary_resize  (Stack* stack, size_t new_capacity) {
 
-    assert_stack_ok (stack); //putc('a', stderr);
+IF_CANARY_PROTECTED (
 
-    size_t new_size = new_capacity * sizeof (Element) + 2 * CANARY_SIZE;
+    Return_code  _stack_canary_resize  (Stack* stack, size_t new_capacity) {
+
+        assert_stack_ok (stack); //putc('a', stderr);
+
+        size_t new_size = new_capacity * sizeof (Element) + 2 * CANARY_SIZE;
 
 
-    if (new_capacity == stack->capacity) { return SUCCESS; }
+        if (new_capacity == stack->capacity) { STACK_AFTER_OPERATION_DUMPING (stack); return SUCCESS; }
 
-    if (new_capacity > stack->capacity) {
+        if (new_capacity > stack->capacity) {
 
-        stack->elements = (Element*) ( (char*) stack->elements - CANARY_SIZE);
+            stack->elements = (Element*) ( (char*) stack->elements - CANARY_SIZE);
+
+
+            stack->elements = (Element*) realloc (stack->elements, new_size);
+            if (stack->elements == nullptr && new_capacity != 0) { log_error (MEMORY_ERR); stack_error_dump (stack); return MEMORY_ERR; }
+
+
+            stack->elements = (Element*) ( (char*) stack->elements + CANARY_SIZE ) + stack->capacity;
+            canary_t second_canary_buffer = *( (canary_t*) stack->elements ); //fprintf (stderr, "%llX", second_canary_buffer);
+
+
+            for (size_t i = 0; i < new_capacity - stack->capacity; i++) {
+
+                stack->elements[i] = Element {NAN COMMA true};
+            }
+
+
+            *( (canary_t*) (stack->elements + new_capacity - stack->capacity) ) = second_canary_buffer;
+            //printf ("%llX", * ( (canary_t*) (stack->elements + new_capacity - stack->capacity) ) );
+
+
+            stack->elements -= stack->capacity;
+            stack->capacity  = new_capacity;
+
+
+        IF_HASH_PROTECTED ( stack_recount_hash (stack); );
+
+
+        STACK_AFTER_OPERATION_DUMPING(stack);
+
+
+        return SUCCESS;
+        }
+
+        stack->elements = (Element*) ( (char*) stack->elements - CANARY_SIZE );
+
+
+        canary_t second_canary_buffer = *(canary_t*) ( (char*) (stack->elements + stack->capacity) + CANARY_SIZE );
 
 
         stack->elements = (Element*) realloc (stack->elements, new_size);
-        if (stack->elements == nullptr) { log_error (MEMORY_ERR); return MEMORY_ERR; }
+        if (stack->elements == nullptr) { log_error (MEMORY_ERR); stack_error_dump (stack); return MEMORY_ERR; }
 
 
-        stack->elements = (Element*) ( (char*) stack->elements + CANARY_SIZE ) + stack->capacity;
-        canary_t second_canary_buffer = *( (canary_t*) stack->elements ); //fprintf (stderr, "%llX", second_canary_buffer);
+        *(canary_t*) ( (char*) (stack->elements + new_capacity) + CANARY_SIZE ) = second_canary_buffer;
 
 
-        for (size_t i = 0; i < new_capacity - stack->capacity; i++) {
-
-            stack->elements[i] = Element {NAN, true};
-        }
+        stack->elements = (Element*) ( (char*) stack->elements + CANARY_SIZE );
+        stack->capacity = new_capacity;
 
 
-        *( (canary_t*) (stack->elements + new_capacity - stack->capacity) ) = second_canary_buffer;
-        //printf ("%llX", * ( (canary_t*) (stack->elements + new_capacity - stack->capacity) ) );
+        IF_HASH_PROTECTED ( stack_recount_hash (stack); );
 
 
-        stack->elements -= stack->capacity;
-        stack->capacity  = new_capacity;
+        STACK_AFTER_OPERATION_DUMPING(stack);
 
 
         return SUCCESS;
     }
+);
 
-    stack->elements = (Element*) ( (char*) stack->elements - CANARY_SIZE );
-
-
-    canary_t second_canary_buffer = *(canary_t*) ( (char*) (stack->elements + stack->capacity) + CANARY_SIZE );
-
-
-    stack->elements = (Element*) realloc (stack->elements, new_size);
-    if (stack->elements == nullptr) { log_error (MEMORY_ERR); return MEMORY_ERR; }
-
-
-    *(canary_t*) ( (char*) (stack->elements + new_capacity) + CANARY_SIZE ) = second_canary_buffer;
-
-
-    stack->elements = (Element*) ( (char*) stack->elements + CANARY_SIZE );
-    stack->capacity = new_capacity;
-
-
-    //stack_dump (stack);
-    return SUCCESS;
-}
 
 Return_code  stack_push  (Stack* stack, Element_value new_element_value) {
 
@@ -144,10 +203,10 @@ Return_code  stack_push  (Stack* stack, Element_value new_element_value) {
         }
         else {
 
-            resize_code = stack_resize (stack, (size_t) ceil ((double) stack->capacity * stack_resize_coefficient) );
+            resize_code = stack_resize ( stack, (size_t) fmax ( ceil ((double) stack->capacity * stack_resize_coefficient) , stack->capacity + 1) );
         }
 
-        if (resize_code) { log_error (resize_code); return resize_code; }
+        if (resize_code) { log_error (resize_code);  stack_error_dump (stack); return resize_code; }
     }
    // stack_dump (stack);
 
@@ -155,45 +214,64 @@ Return_code  stack_push  (Stack* stack, Element_value new_element_value) {
     stack->elements [stack->size - 1] = Element {new_element_value, false};
 
 
+    IF_HASH_PROTECTED ( stack_recount_hash (stack); );
+
+
+    STACK_AFTER_OPERATION_DUMPING (stack);
+
+
     return SUCCESS;
 }
+
 
 Element  stack_pop  (Stack* stack, Return_code* return_code_ptr) {
 
     assert_stack_ok_for_stack_pop (stack);
 
 
-    if (stack->size == 0) {
+    Element return_element = {NAN, true};
 
-        if (return_code_ptr) { *return_code_ptr = SUCCESS; } // OR NOT SUCCESS? SHOULD I RETURN SMTH LIKE CALL_ERR??
-        return Element {NAN, true};
+    if (stack->size != 0) {
+
+        stack->size -= 1;
+        return_element = stack->elements [stack->size];
+        stack->elements [stack->size] = Element {NAN, true};
+
+        IF_HASH_PROTECTED ( stack_recount_hash (stack); );
     }
-
-
-    stack->size -= 1;
-    Element return_element = stack->elements [stack->size];
-    stack->elements [stack->size] = Element {NAN, true};
 
 
     if ( (double) stack->size * pow (stack_resize_coefficient, 2) <= (double) stack->capacity) {
 
-        Return_code resize_code = stack_resize (stack, (size_t) ceil ( (double) stack->capacity / stack_resize_coefficient) );
+        Return_code resize_code = stack_resize (stack, (size_t) fmin ( ceil ( (double) stack->capacity / stack_resize_coefficient), stack->capacity - 1) );
+
         if (resize_code) {
 
             log_error (resize_code);
             if (return_code_ptr) { *return_code_ptr = BAD_ARGS; }
+            stack_error_dump (stack);
             return Element {NAN, true};
         }
     }
 
 
+    IF_HASH_PROTECTED ( stack_recount_hash (stack); );
+
+
     if (return_code_ptr) { *return_code_ptr = SUCCESS; }
+
+
+    STACK_AFTER_OPERATION_DUMPING (stack);
+
+
     return return_element;
 }
+
 
 Stack_state  stack_damaged  (Stack* stack) {
 
     Stack_state stack_state = 0;
+
 
     if (stack == nullptr) { stack_state |= 1; return stack_state; }
 
@@ -208,17 +286,28 @@ Stack_state  stack_damaged  (Stack* stack) {
         if (i >= stack->size) if (!stack->elements [i].poisoned) { stack_state |= (1<<3); break; }
     }
 
+    IF_CANARY_PROTECTED (
 
-    if (stack-> FIRST_CANARY !=  FIRST_CANARY_VALUE) { stack_state |= (1<<4);  }
-    if (stack->SECOND_CANARY != SECOND_CANARY_VALUE) { stack_state |= (1<<4);  }
+        if (stack-> FIRST_CANARY !=  FIRST_CANARY_VALUE) { stack_state |= (1<<4);  }
+        if (stack->SECOND_CANARY != SECOND_CANARY_VALUE) { stack_state |= (1<<4);  }
+
+        if ( *( (canary_t*) stack->elements - 1)                  !=  FIRST_CANARY_VALUE) { stack_state |= (1<<5); }
+        if ( *( (canary_t*) (stack->elements + stack->capacity) ) != SECOND_CANARY_VALUE) { stack_state |= (1<<5); }
+    );
 
 
-    if ( *( (canary_t*) stack->elements - 1)                  !=  FIRST_CANARY_VALUE) { stack_state |= (1<<5); }
-    if ( *( (canary_t*) (stack->elements + stack->capacity) ) != SECOND_CANARY_VALUE) { stack_state |= (1<<5); }
+    IF_HASH_PROTECTED (
+
+        hash_t old_hash = stack->hash; //printf ("hash in stack - %llX\n", old_hash);
+        stack_recount_hash (stack);    //printf ("hash after check - %llX\n", stack->hash);
+        if (old_hash != stack->hash) { stack_state |= (1<<6); }
+    );
 
 
+    //if (stack_state) { printf ("stack state - %hhu\n", stack_state); }
     return stack_state;
 }
+
 
 void  _fstack_dump  (Stack* stack, const char* file_name, const char* file, const char* func, int line) {
 
@@ -262,6 +351,12 @@ void  _fstack_dump  (Stack* stack, const char* file_name, const char* file, cons
     else                                         { fprintf (dump_file, "UNKNOWN NAME "); }
 
     fprintf (dump_file, "(line %d)\n\n", stack->debug_info.birth_line);
+
+
+    IF_HASH_PROTECTED (
+
+        fprintf (dump_file, "stack hash is %llX\n\n", stack->hash);
+    );
 
 
     fprintf (dump_file, "stack is ");
@@ -317,9 +412,68 @@ void  _fstack_dump  (Stack* stack, const char* file_name, const char* file, cons
     fclose (dump_file);
 }
 
+IF_HASH_PROTECTED (
+
+    hash_t  hash300  (void* _data_ptr, size_t size) {
+
+    if (!_data_ptr) return 0;
 
 
+    unsigned char* data_ptr = (unsigned char*) _data_ptr;
 
+
+    hash_t hash_sum  = HASH_SALT;
+    hash_t hash_salt = HASH_SALT; 
+    for (size_t i = 0; i < size; i++) {
+
+        hash_sum  ^= hash_sum * (data_ptr[i] * hash_salt);
+    }
+
+
+    return hash_sum;
+}
+);
+
+IF_HASH_PROTECTED (
+
+    Return_code  _stack_recount_hash  (Stack* stack) {
+
+    if (!stack) { log_error (BAD_ARGS); return BAD_ARGS; }
+
+
+    hash_t hash1 = hash300 (stack, STACK_SIZE - HASH_SIZE);
+    hash_t hash2 = hash300 (stack->elements, stack->capacity * ELEMENT_SIZE);
+
+
+    stack->hash = hash1 ^ hash2;
+
+
+    return SUCCESS;
+}
+);
+
+
+IF_HASH_PROTECTED (
+
+    IF_CANARY_PROTECTED (
+
+        Return_code  _stack_canary_recount_hash  (Stack* stack) {
+
+        if (!stack) { log_error (BAD_ARGS); return BAD_ARGS; }
+
+
+        hash_t hash1 = hash300 (stack, STACK_SIZE - HASH_SIZE - CANARY_SIZE);
+        hash_t hash2 = hash300 (&stack->SECOND_CANARY, CANARY_SIZE);
+        hash_t hash3 = hash300 ( (char*) stack->elements - CANARY_SIZE, stack->capacity + 2 * CANARY_SIZE);
+
+
+        stack->hash = hash1 ^ hash2 ^ hash3; //printf ("%llX ^ %llX ^ %llX = %llX\n", hash1, hash2, hash3, stack->hash);
+
+
+        return SUCCESS;
+    }
+    );
+);
 
 
 

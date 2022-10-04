@@ -273,7 +273,7 @@ Stack_state  stack_damaged  (Stack* stack) {
     Stack_state stack_state = 0;
 
 
-    if (stack == nullptr) { stack_state |= 1; return stack_state; }
+    if (stack == nullptr) { stack_state |= 1; }
 
 
     if (stack->size > stack->capacity)                  { stack_state |= (1<<1); }

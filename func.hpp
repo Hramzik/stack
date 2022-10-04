@@ -26,37 +26,37 @@ const double stack_resize_coefficient = 1.2;
 #define COMMA ,
 
 
-#define log_error(code) _log_error (code, __FILE__, __PRETTY_FUNCTION__, __LINE__)
+#define LOG_ERROR(code) _log_error (code, __FILE__, __PRETTY_FUNCTION__, __LINE__)
 
-#define  stack_ctor(x)  _stack_ctor (x, #x + (#x[0] == '&'), __FILE__, __PRETTY_FUNCTION__, __LINE__)
-#define  stack_dump(x) _fstack_dump (x, nullptr,             __FILE__, __PRETTY_FUNCTION__, __LINE__)
-#define fstack_dump(x) _fstack_dump (x, dump_file_name,      __FILE__, __PRETTY_FUNCTION__, __LINE__)
+#define  STACK_CTOR(x)  _stack_ctor (x, #x + (#x[0] == '&'), __FILE__, __PRETTY_FUNCTION__, __LINE__)
+#define  STACK_DUMP(x) _fstack_dump (x, nullptr,             __FILE__, __PRETTY_FUNCTION__, __LINE__)
+#define FSTACK_DUMP(x) _fstack_dump (x, dump_file_name,      __FILE__, __PRETTY_FUNCTION__, __LINE__)
 
 
 #ifdef ON_STACK_ERROR_DUMPING
 
-    #define assert_stack_ok(x) if (stack_damaged (x)) { fstack_dump (x); log_error (BAD_ARGS); return BAD_ARGS; }
+    #define ASSERT_STACK_OK(x) if (stack_damaged (x)) { FSTACK_DUMP (x); LOG_ERROR (BAD_ARGS); return BAD_ARGS; }
 
-    #define assert_stack_ok_for_stack_pop(x)\
-        if (stack_damaged (x)) { fstack_dump (x); log_error (BAD_ARGS); if (return_code_ptr) { *return_code_ptr = BAD_ARGS; } return Element {NAN, true}; }
+    #define ASSERT_STACK_OK_FOR_STACK_POP(x)\
+            if (stack_damaged (x)) { FSTACK_DUMP (x); LOG_ERROR (BAD_ARGS); if (return_code_ptr) { *return_code_ptr = BAD_ARGS; } return Element {NAN, true}; }
 
-    #define stack_error_dump(x) fstack_dump(x)
+    #define STACK_ERROR_DUMP(x) FSTACK_DUMP(x)
 
 #else
 
-    #define assert_stack_ok(x)\
-    if (stack_damaged (x)) {                 log_error (BAD_ARGS); return BAD_ARGS; }
+    #define ASSERT_STACK_OK(x)\
+    if (stack_damaged (x)) {                 LOG_ERROR (BAD_ARGS); return BAD_ARGS; }
 
-    #define assert_stack_ok_myreturn(x, y)\
-    if (stack_damaged (x)) {                 log_error (BAD_ARGS); if (return_code_ptr) { *return_code_ptr = BAD_ARGS; } return Element {NAN, true}; }
+    #define ASSERT_STACK_OK_FOR_STACK_POP(x)\
+            if (stack_damaged (x)) {                  LOG_ERROR (BAD_ARGS); if (return_code_ptr) { *return_code_ptr = BAD_ARGS; } return Element {NAN, true}; }
 
-    #define stack_error_dump(x)
+    #define STACK_ERROR_DUMP(x)
 
 #endif
 
 
 #ifdef ON_STACK_AFTER_OPERATION_DUMPING
-    #define STACK_AFTER_OPERATION_DUMPING(x) fstack_dump (x)
+    #define STACK_AFTER_OPERATION_DUMPING(x) FSTACK_DUMP (x)
 #else
     #define STACK_AFTER_OPERATION_DUMPING(x)
 #endif
@@ -68,13 +68,13 @@ const double stack_resize_coefficient = 1.2;
     #define CANARY_SIZE sizeof (canary_t)
     #define FIRST_CANARY_VALUE  0xDEADBEEF
     #define SECOND_CANARY_VALUE 0xDEADBEEF
-    #define stack_resize(x,y)     _stack_canary_resize       (x, y)
+    #define stack_resize(x,y)         _stack_canary_resize       (x, y)
 
     #ifdef ON_HASH_PROTECTION
-        #define stack_recount_hash(x) _stack_canary_recount_hash (x)
+        #define STACK_RECOUNT_HASH(x) _stack_canary_recount_hash (x)
     #endif
 
-    #define stack_dtor(x)         _stack_canary_dtor         (x)
+    #define STACK_DTOR(x)             _stack_canary_dtor         (x)
 
 #else
 
@@ -82,10 +82,10 @@ const double stack_resize_coefficient = 1.2;
     #define stack_resize(x,y)     _stack_resize       (x, y)
 
     #ifdef ON_HASH_PROTECTION
-        #define stack_recount_hash(x) _stack_recount_hash (x)
+        #define STACK_RECOUNT_HASH(x) _stack_recount_hash (x)
     #endif
 
-    #define stack_dtor(x)         _stack_dtor         (x)
+    #define STACK_DTOR(x)         _stack_dtor         (x)
 
 #endif
 

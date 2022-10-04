@@ -8,7 +8,7 @@ int main ()
     Stack stack;
 
 
-    stack_ctor (&stack);
+    STACK_CTOR (&stack);
 
     stack_push (&stack, 7);
     stack_push (&stack, 13);
@@ -26,10 +26,10 @@ int main ()
     }
 
 
-    fstack_dump (&stack);
+    FSTACK_DUMP (&stack);
 
 
-    stack_dtor (&stack);
+    STACK_DTOR (&stack);
 
 
     return 0;

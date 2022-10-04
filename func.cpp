@@ -6,7 +6,7 @@
 Return_code  _stack_ctor  (Stack* stack, const char* name, const char* file, const char* func, int line) {
 
     assert ( (file != nullptr) && (func != nullptr) && (line > 0) );
-    if (stack == nullptr || name == nullptr) { log_error (BAD_ARGS); stack_error_dump (stack); return BAD_ARGS; }
+    if (stack == nullptr || name == nullptr) { LOG_ERROR (BAD_ARGS); STACK_ERROR_DUMP (stack); return BAD_ARGS; }
 
 
     stack->elements = nullptr;
@@ -27,7 +27,7 @@ Return_code  _stack_ctor  (Stack* stack, const char* name, const char* file, con
         stack->SECOND_CANARY = SECOND_CANARY_VALUE;
 
         stack->elements = (Element*) calloc (2 * CANARY_SIZE, 1);
-        if (stack->elements == nullptr) { log_error (MEMORY_ERR); stack_error_dump (stack); return MEMORY_ERR; }
+        if (stack->elements == nullptr) { LOG_ERROR (MEMORY_ERR); STACK_ERROR_DUMP (stack); return MEMORY_ERR; }
 
         ( (canary_t*) stack->elements) [0] =  FIRST_CANARY_VALUE;
         ( (canary_t*) stack->elements) [1] = SECOND_CANARY_VALUE;
@@ -36,7 +36,7 @@ Return_code  _stack_ctor  (Stack* stack, const char* name, const char* file, con
     );
 
 
-    IF_HASH_PROTECTED ( stack_recount_hash (stack); );
+    IF_HASH_PROTECTED ( STACK_RECOUNT_HASH (stack); );
 
 
     STACK_AFTER_OPERATION_DUMPING (stack);
@@ -48,7 +48,7 @@ Return_code  _stack_ctor  (Stack* stack, const char* name, const char* file, con
 
 Return_code  _stack_dtor  (Stack* stack) {
 
-    assert_stack_ok (stack);
+    ASSERT_STACK_OK (stack);
 
 
     if (stack->elements != nullptr) {
@@ -68,7 +68,7 @@ IF_CANARY_PROTECTED (
 
     Return_code  _stack_canary_dtor  (Stack* stack) {
 
-        assert_stack_ok (stack);
+        ASSERT_STACK_OK (stack);
 
 
         if (stack->elements != nullptr) {
@@ -87,23 +87,23 @@ IF_CANARY_PROTECTED (
 
 Return_code  _stack_resize  (Stack* stack, size_t new_capacity) {
 
-    assert_stack_ok (stack);
+    ASSERT_STACK_OK (stack);
 
 
     stack->elements = (Element*) realloc (stack->elements, sizeof (Element) * new_capacity);
-    if (stack->elements == nullptr && new_capacity != 0) { log_error (MEMORY_ERR); stack_error_dump (stack); return MEMORY_ERR; }
+    if (stack->elements == nullptr && new_capacity != 0) { LOG_ERROR (MEMORY_ERR); STACK_ERROR_DUMP (stack); return MEMORY_ERR; }
 
 
     for (size_t i = stack->size; i < new_capacity; i++) { stack->elements [i] = Element {NAN, true}; }
 
     stack->capacity = new_capacity;
     //printf ("%zd %zd\n", stack->capacity, new_capacity);
-    //stack_dump (stack);
+    //STACK_DUMP (stack);
 
     if (stack->size > new_capacity) { stack->size = new_capacity; }
 
 
-    IF_HASH_PROTECTED ( stack_recount_hash (stack); );
+    IF_HASH_PROTECTED ( STACK_RECOUNT_HASH (stack); );
 
 
     STACK_AFTER_OPERATION_DUMPING (stack);
@@ -117,7 +117,7 @@ IF_CANARY_PROTECTED (
 
     Return_code  _stack_canary_resize  (Stack* stack, size_t new_capacity) {
 
-        assert_stack_ok (stack); //putc('a', stderr);
+        ASSERT_STACK_OK (stack); //putc('a', stderr);
 
         size_t new_size = new_capacity * sizeof (Element) + 2 * CANARY_SIZE;
 
@@ -130,7 +130,7 @@ IF_CANARY_PROTECTED (
 
 
             stack->elements = (Element*) realloc (stack->elements, new_size);
-            if (stack->elements == nullptr && new_capacity != 0) { log_error (MEMORY_ERR); stack_error_dump (stack); return MEMORY_ERR; }
+            if (stack->elements == nullptr && new_capacity != 0) { LOG_ERROR (MEMORY_ERR); STACK_ERROR_DUMP (stack); return MEMORY_ERR; }
 
 
             stack->elements = (Element*) ( (char*) stack->elements + CANARY_SIZE ) + stack->capacity;
@@ -151,7 +151,7 @@ IF_CANARY_PROTECTED (
             stack->capacity  = new_capacity;
 
 
-        IF_HASH_PROTECTED ( stack_recount_hash (stack); );
+        IF_HASH_PROTECTED ( STACK_RECOUNT_HASH (stack); );
 
 
         STACK_AFTER_OPERATION_DUMPING(stack);
@@ -167,7 +167,7 @@ IF_CANARY_PROTECTED (
 
 
         stack->elements = (Element*) realloc (stack->elements, new_size);
-        if (stack->elements == nullptr) { log_error (MEMORY_ERR); stack_error_dump (stack); return MEMORY_ERR; }
+        if (stack->elements == nullptr) { LOG_ERROR (MEMORY_ERR); STACK_ERROR_DUMP (stack); return MEMORY_ERR; }
 
 
         *(canary_t*) ( (char*) (stack->elements + new_capacity) + CANARY_SIZE ) = second_canary_buffer;
@@ -177,7 +177,7 @@ IF_CANARY_PROTECTED (
         stack->capacity = new_capacity;
 
 
-        IF_HASH_PROTECTED ( stack_recount_hash (stack); );
+        IF_HASH_PROTECTED ( STACK_RECOUNT_HASH (stack); );
 
 
         STACK_AFTER_OPERATION_DUMPING(stack);
@@ -190,7 +190,7 @@ IF_CANARY_PROTECTED (
 
 Return_code  stack_push  (Stack* stack, Element_value new_element_value) {
 
-    assert_stack_ok (stack);
+    ASSERT_STACK_OK (stack);
 
 
     if (stack->size == stack->capacity) {
@@ -206,15 +206,15 @@ Return_code  stack_push  (Stack* stack, Element_value new_element_value) {
             resize_code = stack_resize ( stack, (size_t) fmax ( ceil ((double) stack->capacity * stack_resize_coefficient) , stack->capacity + 1) );
         }
 
-        if (resize_code) { log_error (resize_code);  stack_error_dump (stack); return resize_code; }
+        if (resize_code) { LOG_ERROR (resize_code);  STACK_ERROR_DUMP (stack); return resize_code; }
     }
-   // stack_dump (stack);
+   // STACK_DUMP (stack);
 
     stack->size += 1;
     stack->elements [stack->size - 1] = Element {new_element_value, false};
 
 
-    IF_HASH_PROTECTED ( stack_recount_hash (stack); );
+    IF_HASH_PROTECTED ( STACK_RECOUNT_HASH (stack); );
 
 
     STACK_AFTER_OPERATION_DUMPING (stack);
@@ -226,7 +226,7 @@ Return_code  stack_push  (Stack* stack, Element_value new_element_value) {
 
 Element  stack_pop  (Stack* stack, Return_code* return_code_ptr) {
 
-    assert_stack_ok_for_stack_pop (stack);
+    ASSERT_STACK_OK_FOR_STACK_POP (stack);
 
 
     Element return_element = {NAN, true};
@@ -237,7 +237,7 @@ Element  stack_pop  (Stack* stack, Return_code* return_code_ptr) {
         return_element = stack->elements [stack->size];
         stack->elements [stack->size] = Element {NAN, true};
 
-        IF_HASH_PROTECTED ( stack_recount_hash (stack); );
+        IF_HASH_PROTECTED ( STACK_RECOUNT_HASH (stack); );
     }
 
 
@@ -247,15 +247,15 @@ Element  stack_pop  (Stack* stack, Return_code* return_code_ptr) {
 
         if (resize_code) {
 
-            log_error (resize_code);
+            LOG_ERROR (resize_code);
             if (return_code_ptr) { *return_code_ptr = BAD_ARGS; }
-            stack_error_dump (stack);
+            STACK_ERROR_DUMP (stack);
             return Element {NAN, true};
         }
     }
 
 
-    IF_HASH_PROTECTED ( stack_recount_hash (stack); );
+    IF_HASH_PROTECTED ( STACK_RECOUNT_HASH (stack); );
 
 
     if (return_code_ptr) { *return_code_ptr = SUCCESS; }
@@ -299,7 +299,7 @@ Stack_state  stack_damaged  (Stack* stack) {
     IF_HASH_PROTECTED (
 
         hash_t old_hash = stack->hash; //printf ("hash in stack - %llX\n", old_hash);
-        stack_recount_hash (stack);    //printf ("hash after check - %llX\n", stack->hash);
+        STACK_RECOUNT_HASH (stack);    //printf ("hash after check - %llX\n", stack->hash);
         if (old_hash != stack->hash) { stack_state |= (1<<6); }
     );
 
@@ -323,7 +323,7 @@ void  _fstack_dump  (Stack* stack, const char* file_name, const char* file, cons
     else {
 
         dump_file = fopen (file_name, "a");
-        if (dump_file == nullptr) { log_error (FILE_ERR); return; }
+        if (dump_file == nullptr) { LOG_ERROR (FILE_ERR); return; }
     }
 
 
@@ -438,7 +438,7 @@ IF_HASH_PROTECTED (
 
     Return_code  _stack_recount_hash  (Stack* stack) {
 
-    if (!stack) { log_error (BAD_ARGS); return BAD_ARGS; }
+    if (!stack) { LOG_ERROR (BAD_ARGS); return BAD_ARGS; }
 
 
     hash_t hash1 = hash300 (stack, STACK_SIZE - HASH_SIZE);
@@ -459,7 +459,7 @@ IF_HASH_PROTECTED (
 
         Return_code  _stack_canary_recount_hash  (Stack* stack) {
 
-        if (!stack) { log_error (BAD_ARGS); return BAD_ARGS; }
+        if (!stack) { LOG_ERROR (BAD_ARGS); return BAD_ARGS; }
 
 
         hash_t hash1 = hash300 (stack, STACK_SIZE - HASH_SIZE - CANARY_SIZE);
@@ -615,7 +615,7 @@ void  _log_error  (Return_code _code, const char* file, const char* func, const 
 
     default:
         print_log_time();
-        fprintf (log_file, "wrong error code given to the log_error function in file %s in function %s (line %d)\n", file, func, line); break;
+        fprintf (log_file, "wrong error code given to the LOG_ERROR function in file %s in function %s (line %d)\n", file, func, line); break;
     }
 
 

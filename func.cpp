@@ -304,7 +304,6 @@ Stack_state  stack_damaged  (Stack* stack) {
     );
 
 
-    //if (stack_state) { printf ("stack state - %hhu\n", stack_state); }
     return stack_state;
 }
 

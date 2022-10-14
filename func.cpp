@@ -1,5 +1,5 @@
 
-
+//lalala тест git push'a
 #include "func.hpp"
 
 
@@ -333,7 +333,7 @@ void  _fstack_dump  (Stack* stack, const char* file_name, const char* file, cons
     fprintf (dump_file, "Dumping stack at %s in function %s (line %d)...\n\n", file, func, line);
 
 
-    if (!stack) { fprintf (dump_file, "Stack pointer is nullptr!\n\n"); return; }
+    if (!stack) { fprintf (dump_file, "Stack pointer is nullptr!\n\n"); }
 
 
     fprintf (dump_file, "this stack has name ");
@@ -406,9 +406,6 @@ void  _fstack_dump  (Stack* stack, const char* file_name, const char* file, cons
     );
 
     fprintf (dump_file, "\n");
-
-
-    fclose (dump_file);
 }
 
 IF_HASH_PROTECTED (
